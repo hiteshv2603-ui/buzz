@@ -159,9 +159,24 @@ pub(crate) fn validate_harness_definition_pub(def: &HarnessDefinition) -> Result
 // ── Built-in ID set ──────────────────────────────────────────────────────────
 
 /// IDs reserved for the compiled-in catalog. A custom definition whose `id`
-/// collides with a built-in is rejected to prevent shadowing (e.g. a file
-/// called `goose.json` overriding the first-class Goose runtime).
-const BUILTIN_IDS: &[&str] = &["goose", "claude", "codex", "buzz-agent"];
+/// collides with a built-in or preset is rejected to prevent shadowing (e.g. a
+/// file called `cursor.json` hiding the pre-existing tier-2 preset).
+///
+/// NOTE: keep this list in sync with `PRESET_HARNESSES` in `discovery.rs`.
+const BUILTIN_IDS: &[&str] = &[
+    // Tier-1 first-class runtimes:
+    "goose",
+    "claude",
+    "codex",
+    "buzz-agent",
+    // Tier-2 preset harnesses:
+    "cursor",
+    "omp",
+    "grok",
+    "opencode",
+    "kimi",
+    "amp",
+];
 
 /// Return an error string if `id` conflicts with a built-in harness ID.
 pub(crate) fn check_id_collision(id: &str) -> Result<(), String> {
@@ -197,22 +212,54 @@ fn loaded_harness_registry() -> &'static RwLock<Vec<Arc<HarnessDefinition>>> {
 }
 
 /// Replace the registry contents with `definitions`. Called once per
-/// `discover_acp_runtimes_from` run so spawn queries see the freshest data.
+/// `discover_acp_runtimes_from` run AND on `save_custom_harness` /
+/// `delete_custom_harness` so spawn can always resolve the harness without
+/// waiting for the next full discovery.
 pub(crate) fn update_loaded_harness_registry(definitions: Vec<HarnessDefinition>) {
     let arcs: Vec<Arc<HarnessDefinition>> = definitions.into_iter().map(Arc::new).collect();
-    if let Ok(mut guard) = loaded_harness_registry().write() {
-        *guard = arcs;
-    }
+    // Use `into_inner` to recover from a poisoned lock — the registry is a
+    // plain replaceable Vec with no torn invariant, so poison recovery is safe.
+    let mut guard = match loaded_harness_registry().write() {
+        Ok(g) => g,
+        Err(poisoned) => {
+            tracing::warn!("custom_harnesses: loaded-harness registry was poisoned; recovering");
+            poisoned.into_inner()
+        }
+    };
+    *guard = arcs;
 }
 
 /// Look up a loaded (non-builtin) harness by **id**. Returns `None` when the id
-/// is unknown — callers that need a typed error should use
-/// `require_loaded_harness`.
+/// is unknown. Uses `into_inner` to recover from a poisoned lock so a panic in
+/// one thread never permanently blocks all spawn attempts.
 pub(crate) fn lookup_loaded_harness_by_id(id: &str) -> Option<Arc<HarnessDefinition>> {
-    loaded_harness_registry()
-        .read()
-        .ok()
-        .and_then(|g| g.iter().find(|d| d.id == id).cloned())
+    let guard = match loaded_harness_registry().read() {
+        Ok(g) => g,
+        Err(poisoned) => {
+            tracing::warn!(
+                "custom_harnesses: loaded-harness registry read lock was poisoned; recovering"
+            );
+            poisoned.into_inner()
+        }
+    };
+    guard.iter().find(|d| d.id == id).cloned()
+}
+
+/// Warm the loaded-harness registry synchronously from `custom_dir`.
+///
+/// Must be called **before** `restore_managed_agents_on_launch` so that cold
+/// relaunches can resolve custom/preset harness ids without a full discover
+/// round-trip (which is driven by the frontend and arrives later).
+///
+/// This is intentionally lightweight: it only loads the custom JSON files and
+/// the static preset list — no PATH probing, no availability checks.
+pub(crate) fn warm_harness_registry_from_dir(custom_dir: Option<&std::path::Path>) {
+    // Load only the preset list from the discovery module (static, free).
+    let preset_defs = crate::managed_agents::discovery::preset_harness_definitions();
+    let custom_defs = custom_dir.map(load_custom_harnesses).unwrap_or_default();
+    let mut all: Vec<HarnessDefinition> = preset_defs;
+    all.extend(custom_defs);
+    update_loaded_harness_registry(all);
 }
 
 #[cfg(test)]
@@ -438,5 +485,117 @@ mod tests {
         assert_eq!(v2.len(), 1, "overwrite must not duplicate entries");
         assert_eq!(v2[0].label, "V2");
         assert_eq!(v2[0].command, "rt-bin-v2");
+    }
+
+    // ── Registry warm path ───────────────────────────────────────────────────
+
+    /// After `warm_harness_registry_from_dir` the registry contains preset +
+    /// custom definitions and `lookup_loaded_harness_by_id` resolves them.
+    #[test]
+    fn warm_registry_then_lookup_finds_custom_and_preset_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("my-custom.json"),
+            r#"{"id":"my-custom","label":"My Custom","command":"my-custom-bin"}"#,
+        )
+        .unwrap();
+
+        warm_harness_registry_from_dir(Some(dir.path()));
+
+        // Custom entry must be findable.
+        let found = lookup_loaded_harness_by_id("my-custom");
+        assert!(
+            found.is_some(),
+            "warm registry must contain the custom entry"
+        );
+        assert_eq!(found.unwrap().command, "my-custom-bin");
+
+        // At least one preset entry must be in the registry (e.g. "cursor").
+        let preset = lookup_loaded_harness_by_id("cursor");
+        assert!(
+            preset.is_some(),
+            "warm registry must contain preset entries"
+        );
+    }
+
+    /// `warm_harness_registry_from_dir` with `None` still loads presets.
+    #[test]
+    fn warm_registry_with_no_custom_dir_loads_presets_only() {
+        warm_harness_registry_from_dir(None);
+        // At least the "cursor" preset must be present.
+        assert!(
+            lookup_loaded_harness_by_id("cursor").is_some(),
+            "presets must be reachable even without a custom dir"
+        );
+    }
+
+    /// `warm_harness_registry_from_dir` followed by `update_loaded_harness_registry`
+    /// with an empty slice clears the registry (transactional save/delete contract).
+    #[test]
+    fn warm_then_clear_registry_empties_lookup() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("tmp-agent.json"),
+            r#"{"id":"tmp-agent","label":"Tmp","command":"tmp-bin"}"#,
+        )
+        .unwrap();
+
+        warm_harness_registry_from_dir(Some(dir.path()));
+        assert!(lookup_loaded_harness_by_id("tmp-agent").is_some());
+
+        // Simulate delete — re-warm with empty dir.
+        let empty_dir = tempfile::tempdir().unwrap();
+        warm_harness_registry_from_dir(Some(empty_dir.path()));
+        assert!(
+            lookup_loaded_harness_by_id("tmp-agent").is_none(),
+            "deleted harness must not appear after re-warm"
+        );
+    }
+
+    // ── Legacy avatarUrl regression (F1) ─────────────────────────────────────
+
+    /// A JSON file that contains a legacy `avatarUrl` field (from pre-BYOH code)
+    /// must still deserialize without error (unknown-field handling) and the
+    /// loaded `HarnessDefinition` must NOT carry the URL — the field is absent
+    /// from the struct so serde drops it.
+    #[test]
+    fn legacy_avatar_url_in_json_is_silently_dropped_on_load() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("legacy.json"),
+            r#"{
+                "id": "legacy-agent",
+                "label": "Legacy Agent",
+                "command": "legacy-bin",
+                "avatarUrl": "https://tracking.example.com/logo.png"
+            }"#,
+        )
+        .unwrap();
+
+        let defs = load_custom_harnesses(dir.path());
+        // The file must deserialize successfully (serde ignores unknown fields).
+        assert_eq!(defs.len(), 1, "legacy file with avatarUrl must still load");
+        assert_eq!(defs[0].id, "legacy-agent");
+        // HarnessDefinition has no avatar_url field — prove the URL cannot
+        // be routed to a catalog entry by serializing back and checking.
+        let json = serde_json::to_string(&defs[0]).unwrap();
+        assert!(
+            !json.contains("https://tracking.example.com"),
+            "serialized HarnessDefinition must not contain the legacy avatar URL"
+        );
+    }
+
+    // ── Preset id reservation ────────────────────────────────────────────────
+
+    /// All preset ids must be blocked by `check_id_collision`.
+    #[test]
+    fn preset_ids_are_reserved_and_cannot_be_used_as_custom_ids() {
+        let preset_ids = ["cursor", "omp", "grok", "opencode", "kimi", "amp"];
+        for id in preset_ids {
+            assert!(
+                check_id_collision(id).is_err(),
+                "preset id {id:?} should be rejected by check_id_collision"
+            );
+        }
     }
 }

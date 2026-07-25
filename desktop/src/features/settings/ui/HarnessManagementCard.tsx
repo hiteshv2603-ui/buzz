@@ -27,13 +27,7 @@ import { SettingsSectionHeader } from "./SettingsSectionHeader";
 // longer maintain a duplicate HARNESS_PRESETS array here. The backend
 // PRESET_HARNESSES static drives availability detection and canonical data.
 
-function PresetCard({
-  entry,
-  onAdd,
-}: {
-  entry: AcpRuntimeCatalogEntry;
-  onAdd: (entry: AcpRuntimeCatalogEntry) => void;
-}) {
+function PresetCard({ entry }: { entry: AcpRuntimeCatalogEntry }) {
   const isDetected = entry.availability === "available";
 
   return (
@@ -65,20 +59,9 @@ function PresetCard({
         ) : null}
       </div>
 
-      {/* Action row */}
-      <div className="flex items-center gap-2">
-        <Button
-          className="h-7 px-3 text-xs"
-          data-testid={`harness-preset-add-${entry.id}`}
-          onClick={() => onAdd(entry)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Add
-        </Button>
-        {!isDetected ? (
+      {/* Docs link for non-detected presets */}
+      {!isDetected && entry.installInstructionsUrl ? (
+        <div className="flex items-center gap-2">
           <button
             className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             onClick={() => void openUrl(entry.installInstructionsUrl)}
@@ -87,8 +70,8 @@ function PresetCard({
             <ExternalLink className="h-3.5 w-3.5" />
             Install
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -585,17 +568,6 @@ export function HarnessManagementCard() {
 
   const customEntries = catalog.filter((e) => e.source === "custom");
 
-  function handlePresetAdd(entry: AcpRuntimeCatalogEntry) {
-    setPresetPrefill({
-      id: entry.id,
-      label: entry.label,
-      command: entry.command ?? "",
-      args: entry.defaultArgs ?? [],
-      installInstructionsUrl: entry.installInstructionsUrl,
-    });
-    setShowForm(true);
-  }
-
   function handleFormClose() {
     setShowForm(false);
     setPresetPrefill(undefined);
@@ -620,11 +592,7 @@ export function HarnessManagementCard() {
             data-testid="harness-preset-gallery"
           >
             {presetEntries.map((entry) => (
-              <PresetCard
-                entry={entry}
-                key={entry.id}
-                onAdd={handlePresetAdd}
-              />
+              <PresetCard entry={entry} key={entry.id} />
             ))}
           </div>
         </div>

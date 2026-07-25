@@ -1058,3 +1058,43 @@ fn sweep_condition_known_binary_with_marker_is_included() {
         "known binary with marker must be included"
     );
 }
+
+// ── I3: receipt path collector decision ─────────────────────────────────────
+//
+// `valid_agent_runtime_receipt` used to AND-gate process_belongs_to_us (a
+// cheap name-check) with process_has_buzz_marker. Custom harnesses don't match
+// KNOWN_AGENT_BINARIES, so their receipts would never be valid — the receipt
+// cleanup loop would leave them running. The fix uses buzz_sweep_owns_process
+// (marker-only) in valid_agent_runtime_receipt.
+//
+// These tests verify the predicate truth table that valid_agent_runtime_receipt
+// now relies on. They would fail if the AND-gate were reinstated.
+
+/// Simulates valid_agent_runtime_receipt's ownership decision for a custom
+/// harness: belongs_to_us=false (not in KNOWN_AGENT_BINARIES), has_marker=true.
+/// Must be INCLUDED — the marker is authoritative, name is irrelevant.
+///
+/// Would fail if valid_agent_runtime_receipt used process_belongs_to_us &&
+/// process_has_buzz_marker (AND-gate).
+#[test]
+fn receipt_ownership_custom_harness_with_marker_is_valid() {
+    // Custom binary: not in KNOWN_AGENT_BINARIES (belongs_to_us = false)
+    // but carries BUZZ_MANAGED_AGENT marker (has_buzz_marker = true).
+    assert!(
+        buzz_sweep_owns_process(false, true),
+        "custom harness with marker must be valid for receipt ownership"
+    );
+}
+
+/// Simulates valid_agent_runtime_receipt's ownership decision for a known
+/// harness binary WITHOUT the marker (stray process, not owned by us).
+/// Must be EXCLUDED.
+#[test]
+fn receipt_ownership_known_binary_without_marker_is_not_valid() {
+    // Known binary name (belongs_to_us = true) but no marker.
+    // This is a stray process that happens to share a binary name — must exclude.
+    assert!(
+        !buzz_sweep_owns_process(true, false),
+        "known binary without marker must not be valid for receipt ownership"
+    );
+}

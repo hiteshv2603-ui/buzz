@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { QueryClient } from "@tanstack/react-query";
 
+import { router } from "@/app/router";
 import {
   getIdentity,
   importIdentity,
@@ -224,6 +225,20 @@ export function MachineOnboardingFlow({
                     return;
                   }
                   setPage("config");
+                },
+                navigateToAgentSettings: () => {
+                  // Complete onboarding first so the main app is fully mounted,
+                  // then navigate to Settings → Agents in a microtask so the
+                  // router context is available. Uses the global router import
+                  // (same pattern as App.tsx) because MachineOnboardingFlow is
+                  // rendered outside the TanStack router provider.
+                  complete(selectedPubkey ?? undefined);
+                  setTimeout(() => {
+                    void router.navigate({
+                      to: "/settings",
+                      search: { section: "agents" },
+                    });
+                  }, 0);
                 },
               }}
               direction="forward"

@@ -144,10 +144,17 @@ pub async fn save_custom_harness(
             return Err(format!("invalid original_id {old_id:?}"));
         }
         let old_path = custom_dir.join(format!("{old_id}.json"));
-        match std::fs::remove_file(&old_path) {
-            Ok(()) | Err(_) => {} // Best-effort; new file already committed.
+        if let Err(e) = std::fs::remove_file(&old_path) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(format!("failed to remove old harness file {old_id:?}: {e}"));
+            }
         }
     }
+
+    // Refresh the loaded-harness registry transactionally so a spawn/start
+    // immediately after save can resolve the new id without waiting for the
+    // next frontend-driven discover_acp_providers call.
+    custom_harnesses::warm_harness_registry_from_dir(Some(&custom_dir));
 
     // Resolve availability for the returned catalog entry.
     let (availability, command_opt, binary_path) =
@@ -216,13 +223,19 @@ pub async fn delete_custom_harness(id: String, app: tauri::AppHandle) -> Result<
     let target_path = custom_dir.join(format!("{id}.json"));
 
     match std::fs::remove_file(&target_path) {
-        Ok(()) => Ok(()),
+        Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Idempotent: already gone is fine.
-            Ok(())
         }
-        Err(e) => Err(format!("failed to delete harness {id:?}: {e}")),
+        Err(e) => return Err(format!("failed to delete harness {id:?}: {e}")),
     }
+
+    // Refresh the loaded-harness registry transactionally so the deleted id
+    // is immediately unresolvable, without waiting for the next frontend
+    // discover_acp_providers call.
+    custom_harnesses::warm_harness_registry_from_dir(Some(&custom_dir));
+
+    Ok(())
 }
 
 #[tauri::command]

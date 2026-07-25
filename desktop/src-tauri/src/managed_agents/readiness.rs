@@ -95,6 +95,25 @@ pub(crate) fn resolve_effective_agent_env(
 ) -> EffectiveAgentEnv {
     let effective_command = crate::managed_agents::record_agent_command(record, personas);
 
+    // Look up the harness definition for definition-level env (preset/custom).
+    // Same resolution logic as spawn_agent_child: record runtime id first, then
+    // persona runtime id, then nothing.
+    let harness_def = {
+        let runtime_id = record
+            .runtime
+            .as_deref()
+            .or_else(|| {
+                record.persona_id.as_deref().and_then(|pid| {
+                    personas
+                        .iter()
+                        .find(|p| p.id == pid)
+                        .and_then(|p| p.runtime.as_deref())
+                })
+            })
+            .unwrap_or("");
+        crate::managed_agents::custom_harnesses::lookup_loaded_harness_by_id(runtime_id)
+    };
+
     // Layer 1: baked build defaults (floor — internal builds only; OSS = empty).
     let mut env = baked_build_env();
 
@@ -115,6 +134,20 @@ pub(crate) fn resolve_effective_agent_env(
             effective_provider,
         ) {
             env.insert(key.to_string(), value.to_string());
+        }
+    }
+
+    // Layer 2b: definition env — the harness author's defaults (e.g. CURSOR_ACP=1).
+    // Applied as a floor below global so user env always wins on collision.
+    // Reserved keys (BUZZ_MANAGED_AGENT, BUZZ_PRIVATE_KEY, …) are stripped.
+    if let Some(ref def) = harness_def {
+        for (key, value) in &def.env {
+            if !super::env_vars::is_reserved_env_key(key)
+                && !key.eq_ignore_ascii_case("BUZZ_MANAGED_AGENT")
+                && !key.eq_ignore_ascii_case("BUZZ_MANAGED_AGENT_START_NONCE")
+            {
+                env.insert(key.clone(), value.clone());
+            }
         }
     }
 

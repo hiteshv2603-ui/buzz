@@ -260,7 +260,7 @@ Buzz Desktop supports registering any ACP-speaking agent tool as a selectable ru
 
 **Tier-1 — compiled-in runtimes** (Goose, Claude Code, Codex, Buzz Agent): have auto-installers, auth probes, and first-class onboarding. Their IDs (`goose`, `claude`, `codex`, `buzz-agent`) are reserved and cannot be overridden.
 
-**Tier-2 — preset catalog** (Cursor, Oh My Pi, Grok Build, OpenCode, Kimi Code, Amp): bundled data entries in the Settings → Agents harness gallery, with logos and verified command/args. Available on their own tab if already installed; otherwise surfaced as "Add" cards with docs links.
+**Tier-2 — preset catalog** (Cursor, Oh My Pi, Grok Build, OpenCode, Kimi Code, Amp): static `HarnessDefinition` entries in `desktop/src-tauri/src/managed_agents/discovery.rs` (`PRESET_HARNESSES`). They are always present in the runtime catalog, PATH-probed for availability, not editable or deletable by the user. Displayed with bundled logos; if not installed, a docs link appears instead.
 
 **Tier-3 — user custom harnesses**: JSON files in `<app-data>/custom_harnesses/` that the user can create from the Settings UI or drop in directly. Each file describes one harness — no install scripts.
 
@@ -272,6 +272,9 @@ Buzz Desktop supports registering any ACP-speaking agent tool as a selectable ru
   "label": "My Agent",
   "command": "my-agent-bin",
   "args": ["acp"],
+  "env": {
+    "MY_AGENT_MODE": "acp"
+  },
   "installInstructionsUrl": "https://example.com/docs",
   "installHint": "Download from example.com"
 }
@@ -281,21 +284,30 @@ Fields:
 - `id` — `[a-z0-9_][a-z0-9_-]*` (used as the runtime picker value and file name)
 - `label` — human-readable name shown in the UI
 - `command` — the executable name or absolute path (must be non-empty)
-- `args` — optional default CLI arguments
+- `args` — optional default CLI arguments (array); instance-level args override this when non-empty
+- `env` — optional environment variables injected at spawn time (definition env is a floor; user/persona/global env overrides it; Buzz-reserved keys like `BUZZ_MANAGED_AGENT` are always stripped and cannot be overridden)
 - `installInstructionsUrl` / `installHint` — shown when the binary is not on PATH
 
 Invalid files (bad JSON, unknown id, empty command) are skipped with a warning and do not break discovery for other entries.
+
+### Security guarantees
+
+- No install shell commands in preset or custom definitions — only the user's own PATH is consulted.
+- `can_auto_install` is always `false` for preset and custom entries.
+- No user-supplied icon URLs — icons are bundled assets keyed by id in `RuntimeIcon.tsx`.
+- `BUZZ_MANAGED_AGENT` and other Buzz identity keys cannot be overridden by `env` in a custom definition; they are stripped before merging.
 
 ### Adding a preset (contributor guide)
 
 To add a new runtime to the tier-2 gallery:
 
-1. **Verify the ACP entrypoint** from the vendor's own documentation — do not rely on a PR description alone.
-2. **Add a `HarnessPreset` entry** in `desktop/src/features/settings/ui/HarnessManagementCard.tsx` inside `HARNESS_PRESETS`.
-3. **Add a logo** (64×64 PNG or optimised SVG) to `desktop/public/harness-logos/<id>.png` and reference it as `logoPath`.
-4. That's it — no Rust changes required for tier-2.
+1. **Verify the ACP entrypoint** from the vendor's own documentation — do not rely on a PR description alone. Test with the actual binary.
+2. **Add a `HarnessDefinition` entry** to the `PRESET_HARNESSES` slice in `desktop/src-tauri/src/managed_agents/discovery.rs`. Fill `id`, `label`, `command`, `args`, `install_instructions_url`, `install_hint`. Leave `env` empty unless the harness requires a specific env var to enable ACP mode.
+3. **Add the preset id to `BUILTIN_IDS`** in `desktop/src-tauri/src/managed_agents/custom_harnesses.rs` so custom JSON files cannot shadow it.
+4. **Add a bundled logo** (64×64 PNG or optimised SVG) to `desktop/public/harness-logos/<id>.png` and add a corresponding entry to `PRESET_LOGOS` in `desktop/src/features/onboarding/ui/RuntimeIcon.tsx`.
+5. Run `cargo test --lib` and `just desktop-typecheck` to verify everything compiles.
 
-The built-in `BUILTIN_IDS` list (`goose`, `claude`, `codex`, `buzz-agent`) is the only reserved namespace; every other id is open.
+The built-in `BUILTIN_IDS` set (`goose`, `claude`, `codex`, `buzz-agent`, and all current preset ids) is the reserved namespace; every other id is available for custom harnesses.
 
 ## Using Any ACP Agent
 

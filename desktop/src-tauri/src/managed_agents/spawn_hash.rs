@@ -88,6 +88,38 @@ pub(crate) fn spawn_config_hash(
 
     let effective_command = crate::managed_agents::record_agent_command(record, personas);
     let runtime_meta = known_acp_runtime(&effective_command);
+
+    // Resolve definition-level args: same precedence as spawn_agent_child.
+    // Explicit non-empty instance args win; otherwise use definition args.
+    let harness_def = {
+        let runtime_id = record
+            .runtime
+            .as_deref()
+            .or_else(|| {
+                record.persona_id.as_deref().and_then(|pid| {
+                    personas
+                        .iter()
+                        .find(|p| p.id == pid)
+                        .and_then(|p| p.runtime.as_deref())
+                })
+            })
+            .unwrap_or("");
+        crate::managed_agents::custom_harnesses::lookup_loaded_harness_by_id(runtime_id)
+    };
+    let effective_args = {
+        let record_args = record.agent_args.clone();
+        let instance_has_args = record_args.iter().any(|a| !a.trim().is_empty());
+        if instance_has_args {
+            normalize_agent_args(&effective_command, record_args)
+        } else if let Some(ref def) = harness_def {
+            normalize_agent_args(&effective_command, def.args.clone())
+        } else {
+            normalize_agent_args(&effective_command, record_args)
+        }
+    };
+
+    // `resolve_effective_agent_env` now includes definition env as a floor
+    // layer (below global/persona/agent), mirroring spawn_agent_child exactly.
     let effective = resolve_effective_agent_env(record, personas, runtime_meta, global);
 
     let mut hasher = DefaultHasher::new();
@@ -95,14 +127,14 @@ pub(crate) fn spawn_config_hash(
     // Harness identity and derivations (live-persona-resolved, like spawn).
     record.acp_command.hash(&mut hasher);
     effective_command.hash(&mut hasher);
-    normalize_agent_args(&effective_command, record.agent_args.clone()).hash(&mut hasher);
+    effective_args.hash(&mut hasher);
     runtime_meta
         .and_then(|r| r.mcp_command)
         .unwrap_or("")
         .hash(&mut hasher);
 
-    // Effective env layering (baked floor → runtime metadata → user env).
-    // BTreeMap iteration is ordered, so this is deterministic.
+    // Effective env layering (baked floor → runtime metadata → definition env
+    // → global → persona → agent). BTreeMap iteration is ordered, deterministic.
     effective.env.hash(&mut hasher);
 
     // Record fields the spawn env writes read directly. The relay is hashed

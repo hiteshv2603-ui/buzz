@@ -137,7 +137,11 @@ const overrides = new Map([
   // Linux AND-gate in sweep + orphan collectors, 4 production predicate tests.
   // +12: BYOH F2 — record_agent_command / effective_agent_command check loaded
   // harness registry for preset/custom ids after static-builtin lookup.
-  ["src-tauri/src/managed_agents/runtime.rs", 2259],
+  // +61: BYOH pass-2 — I2 (spawn_agent_child env+args from definition), I3
+  // (valid_agent_runtime_receipt uses buzz_sweep_owns_process marker-only),
+  // I6 (cross-platform buzz_sweep_owns_process, drop #[cfg(unix)]), +2 new
+  // receipt-path collector-decision tests.
+  ["src-tauri/src/managed_agents/runtime.rs", 2320],
   // config-bridge setup-payload env-boundary fix adds readiness wiring in
   // spawn_agent_child; load-bearing security fix, queued to split.
   ["src-tauri/src/managed_agents/config_bridge/reader.rs", 1016],
@@ -189,7 +193,9 @@ const overrides = new Map([
   // configure_runtime_cli (fix #2397). Test-only growth; queued to split.
   // +34: BYOH custom-harness sweep condition unit tests — 3 tests validating
   // the OR-gate fix for custom-binary orphan cleanup.
-  ["src-tauri/src/managed_agents/runtime/tests.rs", 1075],
+  // +26: BYOH pass-2 I3 — 2 collector-decision tests for receipt path
+  // ownership (valid_agent_runtime_receipt uses buzz_sweep_owns_process).
+  ["src-tauri/src/managed_agents/runtime/tests.rs", 1101],
   // applyWorkspace reposDir parameter plus the validateReposDir binding,
   // threaded through Tauri invokes for configurable repos_dir, plus the
   // harness-persona-sync `harnessOverride` create-input bit — load-bearing
@@ -311,7 +317,11 @@ const overrides = new Map([
   // populate loaded-harness registry), record/effective command resolution now
   // checks loaded registry for preset/custom ids. Queued to split presets out.
   // +3: BYOH F5 — seen_ids rejects preset/builtin collisions from custom files.
-  ["src-tauri/src/managed_agents/discovery.rs", 1561],
+  // +79: BYOH pass-2 C1 — 4 registry lifecycle tests (warm→spawn, delete→
+  // dangling, immediate save+start, edit with rename); try_record_agent_command
+  // typed error for dangling ids wired into spawn; readiness/spawn_hash now
+  // include definition env floor.
+  ["src-tauri/src/managed_agents/discovery.rs", 1640],
   // rebase over codex-acp-package-swap: its version-probe tests union with the
   // doctor-install-reliability nvm/login-shell/semver tests — each side alone
   // stayed under the 1000 default; the union exceeds it.
@@ -322,7 +332,9 @@ const overrides = new Map([
   // None regression, .cmd shim resolution, no-git-bash error hint.
   // +32: deterministic .cmd resolver + no-registry + install_shell_from tests.
   // Managed-path resolution test split to discovery/tests/managed_path_resolution.rs.
-  ["src-tauri/src/managed_agents/discovery/tests.rs", 1273],
+  // +227: BYOH pass-2 C1 — 4 registry lifecycle tests (warm→spawn, delete→dangling,
+  // immediate save+start, edit with rename) added to discovery/tests.rs.
+  ["src-tauri/src/managed_agents/discovery/tests.rs", 1500],
   // identity-import-keyring: the identity resolution state machine's behavioral
   // matrix (46 tests over FakeIdentityStore — probe × marker × file cells,
   // adoption / read-back-corruption / marker-failure arms, recovery-mode
@@ -517,7 +529,9 @@ const overrides = new Map([
   // delete_custom_harness (id-guard, builtin reject, remove file) commands;
   // discover_acp_providers updated to pass AppHandle + custom_harnesses dir.
   // +30: BYOH F5 — atomic-write-file dep, original_id rename/delete support.
-  ["src-tauri/src/commands/agent_discovery.rs", 1966],
+  // +13: BYOH pass-2 C1 — warm_harness_registry_from_dir call in save and
+  // delete commands now verifies transactional registry refresh.
+  ["src-tauri/src/commands/agent_discovery.rs", 1979],
   // draft-persistence predicate: submit-time `loadDraft` check + inline comment
   // + deps-array entry in submitMessage closes the never-persisted-boundary
   // defect (Thufir Pass-3 finding). Load-bearing correctness fix; queued to

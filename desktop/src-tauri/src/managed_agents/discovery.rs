@@ -358,6 +358,63 @@ pub fn effective_agent_command(
 mod overrides;
 pub use overrides::{apply_agent_command_update, create_time_agent_command_override};
 
+/// Spawn-time variant of `record_agent_command` that returns a typed error when
+/// a record's `runtime` id or its persona's `runtime` id is set but cannot be
+/// resolved (i.e. the definition was deleted after the agent was created).
+///
+/// Returns `Err("DANGLING_HARNESS_ID:<id>")` so callers can surface the error
+/// without falling through to `buzz-agent`.  When there is no runtime id at all
+/// the fallback to `default_agent_command()` is intentional (legacy agents
+/// pre-date the unified harness model).
+pub fn try_record_agent_command(
+    record: &crate::managed_agents::types::ManagedAgentRecord,
+    personas: &[crate::managed_agents::types::AgentDefinition],
+) -> Result<String, String> {
+    // Explicit pin always wins — if the user set a raw override, honour it.
+    if let Some(pin) = record
+        .agent_command_override
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        return Ok(pin.to_string());
+    }
+
+    // Record-level runtime id: if set but unresolvable → typed error.
+    if let Some(id) = record.runtime.as_deref() {
+        if let Some(cmd) = known_acp_runtime_exact(id).and_then(|r| r.commands.first().copied()) {
+            return Ok(cmd.to_string());
+        }
+        if let Some(def) = crate::managed_agents::custom_harnesses::lookup_loaded_harness_by_id(id)
+        {
+            return Ok(def.command.clone());
+        }
+        return Err(format!("DANGLING_HARNESS_ID:{id}"));
+    }
+
+    // Persona-level runtime id.
+    if let Some(persona_id) = record.persona_id.as_deref() {
+        if let Some(persona) = personas.iter().find(|p| p.id == persona_id) {
+            if let Some(id) = persona.runtime.as_deref() {
+                if let Some(cmd) =
+                    known_acp_runtime_exact(id).and_then(|r| r.commands.first().copied())
+                {
+                    return Ok(cmd.to_string());
+                }
+                if let Some(def) =
+                    crate::managed_agents::custom_harnesses::lookup_loaded_harness_by_id(id)
+                {
+                    return Ok(def.command.clone());
+                }
+                return Err(format!("DANGLING_HARNESS_ID:{id}"));
+            }
+        }
+    }
+
+    // No runtime id set — legacy agent; use the safe default.
+    Ok(default_agent_command())
+}
+
 fn default_agent_args(command: &str) -> Option<Vec<String>> {
     match normalize_command_identity(command).as_str() {
         "goose" => Some(vec!["acp".to_string()]),
@@ -1242,6 +1299,28 @@ const PRESET_HARNESSES: &[PresetHarness] = &[
         install_hint: "Install the amp-acp npm adapter: npm install -g amp-acp.",
     },
 ];
+
+/// Return the static preset harness definitions as `HarnessDefinition` values.
+///
+/// Used by `warm_harness_registry_from_dir` to seed the loaded-harness registry
+/// at startup before the frontend triggers a full discovery run.
+pub(crate) fn preset_harness_definitions(
+) -> Vec<crate::managed_agents::custom_harnesses::HarnessDefinition> {
+    PRESET_HARNESSES
+        .iter()
+        .map(
+            |p| crate::managed_agents::custom_harnesses::HarnessDefinition {
+                id: p.id.to_string(),
+                label: p.label.to_string(),
+                command: p.command.to_string(),
+                args: p.args.iter().map(|s| s.to_string()).collect(),
+                env: std::collections::BTreeMap::new(),
+                install_instructions_url: p.install_instructions_url.to_string(),
+                install_hint: p.install_hint.to_string(),
+            },
+        )
+        .collect()
+}
 
 /// Discover all ACP runtimes, optionally merging user-defined custom harnesses
 /// from `custom_harnesses_dir`.
