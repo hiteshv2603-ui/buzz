@@ -1298,6 +1298,22 @@ const PRESET_HARNESSES: &[PresetHarness] = &[
         install_instructions_url: "https://github.com/tao12345666333/amp-acp",
         install_hint: "Install the amp-acp npm adapter: npm install -g amp-acp.",
     },
+    PresetHarness {
+        id: "hermes",
+        label: "Hermes Agent",
+        command: "hermes-acp",
+        args: &[],
+        install_instructions_url: "https://hermes-agent.nousresearch.com",
+        install_hint: "Install Hermes Agent from hermes-agent.nousresearch.com.",
+    },
+    PresetHarness {
+        id: "openclaw",
+        label: "OpenClaw",
+        command: "openclaw",
+        args: &["acp"],
+        install_instructions_url: "https://docs.openclaw.ai/start/getting-started",
+        install_hint: "Install OpenClaw: npm install -g openclaw@latest.",
+    },
 ];
 
 /// Return the static preset harness definitions as `HarnessDefinition` values.

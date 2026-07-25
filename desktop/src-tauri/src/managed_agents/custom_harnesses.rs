@@ -176,6 +176,8 @@ const BUILTIN_IDS: &[&str] = &[
     "opencode",
     "kimi",
     "amp",
+    "hermes",
+    "openclaw",
 ];
 
 /// Return an error string if `id` conflicts with a built-in harness ID.
@@ -590,7 +592,9 @@ mod tests {
     /// All preset ids must be blocked by `check_id_collision`.
     #[test]
     fn preset_ids_are_reserved_and_cannot_be_used_as_custom_ids() {
-        let preset_ids = ["cursor", "omp", "grok", "opencode", "kimi", "amp"];
+        let preset_ids = [
+            "cursor", "omp", "grok", "opencode", "kimi", "amp", "hermes", "openclaw",
+        ];
         for id in preset_ids {
             assert!(
                 check_id_collision(id).is_err(),

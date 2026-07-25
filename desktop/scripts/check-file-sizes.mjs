@@ -327,7 +327,9 @@ const overrides = new Map([
   // +7: BYOH pass-2 I2 env round-trip — definition_env field populated in
   // custom catalog entries + 2 discriminating tests (custom env preserved,
   // builtin env empty). Load-bearing edit round-trip fix.
-  ["src-tauri/src/managed_agents/discovery.rs", 1647],
+  // +16: BYOH scope addition — Hermes Agent + OpenClaw preset entries (two
+  // data-only PresetHarness structs; no new logic or test functions).
+  ["src-tauri/src/managed_agents/discovery.rs", 1663],
   // rebase over codex-acp-package-swap: its version-probe tests union with the
   // doctor-install-reliability nvm/login-shell/semver tests — each side alone
   // stayed under the 1000 default; the union exceeds it.
