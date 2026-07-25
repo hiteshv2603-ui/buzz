@@ -562,6 +562,14 @@ export type AcpRuntimeCatalogEntry = {
    * UI — only "custom" entries can be edited or deleted.
    */
   source: "builtin" | "preset" | "custom";
+  /**
+   * Definition-level environment variables for `source: custom` entries.
+   *
+   * Populated by the backend from `HarnessDefinition.env` so the edit form can
+   * read them back without losing existing env vars on save. Always absent/empty
+   * for `builtin` and `preset` entries.
+   */
+  definitionEnv?: Record<string, string>;
 };
 
 /** An AcpRuntimeCatalogEntry that is confirmed available — command and binaryPath are non-null. */

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { idFromLabel, buildEnvRecord, filterArgs } from "./harnessFormLogic.ts";
+import {
+  idFromLabel,
+  buildEnvRecord,
+  filterArgs,
+  envPairsFromRecord,
+} from "./harnessFormLogic.ts";
 
 // ── idFromLabel ──────────────────────────────────────────────────────────────
 
@@ -126,4 +131,42 @@ test("filterArgs_argWithInternalSpaces_preserved", () => {
 
 test("filterArgs_emptyArray_returnsEmpty", () => {
   assert.deepEqual(filterArgs([]), []);
+});
+
+// ── envPairsFromRecord ────────────────────────────────────────────────────────
+
+test("envPairsFromRecord_undefinedRecord_returnsEmptyArray", () => {
+  assert.deepEqual(envPairsFromRecord(undefined), []);
+});
+
+test("envPairsFromRecord_emptyRecord_returnsEmptyArray", () => {
+  assert.deepEqual(envPairsFromRecord({}), []);
+});
+
+test("envPairsFromRecord_singleEntry_returnsSinglePair", () => {
+  assert.deepEqual(envPairsFromRecord({ FOO: "bar" }), [
+    { key: "FOO", value: "bar" },
+  ]);
+});
+
+test("envPairsFromRecord_multipleEntries_returnsAllPairs", () => {
+  const result = envPairsFromRecord({ ALPHA: "1", BETA: "2" });
+  // BTreeMap serializes in sorted key order; verify both pairs are present.
+  assert.equal(result.length, 2);
+  assert.ok(result.some((p) => p.key === "ALPHA" && p.value === "1"));
+  assert.ok(result.some((p) => p.key === "BETA" && p.value === "2"));
+});
+
+test("envPairsFromRecord_valueCanBeEmptyString", () => {
+  assert.deepEqual(envPairsFromRecord({ EMPTY_VAL: "" }), [
+    { key: "EMPTY_VAL", value: "" },
+  ]);
+});
+
+test("envPairsFromRecord_roundTrip_buildEnvRecord_restoresOriginal", () => {
+  // Proves the edit round-trip: catalog env → pairs → save payload → same map.
+  const original = { FOO: "bar", BAZ: "qux" };
+  const pairs = envPairsFromRecord(original);
+  const restored = buildEnvRecord(pairs);
+  assert.deepEqual(restored, original);
 });

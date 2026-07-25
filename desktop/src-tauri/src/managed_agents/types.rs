@@ -610,6 +610,16 @@ pub struct AcpRuntimeCatalogEntry {
     /// Whether this entry came from the compiled-in catalog or a user-supplied
     /// JSON file in `custom_harnesses/`. The UI uses this to decide editability.
     pub source: HarnessSource,
+    /// Definition-level environment variables for `source: custom` entries.
+    ///
+    /// Populated from `HarnessDefinition.env` so the edit form can read them
+    /// back and the user doesn't silently lose env vars when saving.  Always
+    /// empty for `builtin` and `preset` entries (those env values come from the
+    /// runtime metadata path, not user-editable JSON).
+    ///
+    /// Skipped in serialization when empty to keep the catalog payload compact.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub definition_env: BTreeMap<String, String>,
 }
 
 /// Result of a single install step (CLI or adapter).

@@ -245,7 +245,10 @@ const overrides = new Map([
   // doc comment) and AgentTeam/CreateTeamInput/UpdateTeamInput.instructions
   // (+3) — the new team-id spawn link and the runtime-layered instructions
   // field.
-  ["src/shared/api/types.ts", 1047],
+  // byoh-env-roundtrip: AcpRuntimeCatalogEntry.definitionEnv field + JSDoc
+  // (+12 lines) so the edit form can read back existing env vars on save.
+  // Load-bearing correctness fix. Queued to split.
+  ["src/shared/api/types.ts", 1049],
   // readiness-gate: PersonaDialog.tsx threads computeLocalModeGate +
   // requiredCredentialEnvKeys + RequiredFieldLabel so the "New agent" dialog
   // shows required markers and credential amber rows (parity with
@@ -321,7 +324,10 @@ const overrides = new Map([
   // dangling, immediate save+start, edit with rename); try_record_agent_command
   // typed error for dangling ids wired into spawn; readiness/spawn_hash now
   // include definition env floor.
-  ["src-tauri/src/managed_agents/discovery.rs", 1640],
+  // +7: BYOH pass-2 I2 env round-trip — definition_env field populated in
+  // custom catalog entries + 2 discriminating tests (custom env preserved,
+  // builtin env empty). Load-bearing edit round-trip fix.
+  ["src-tauri/src/managed_agents/discovery.rs", 1647],
   // rebase over codex-acp-package-swap: its version-probe tests union with the
   // doctor-install-reliability nvm/login-shell/semver tests — each side alone
   // stayed under the 1000 default; the union exceeds it.
@@ -334,7 +340,9 @@ const overrides = new Map([
   // Managed-path resolution test split to discovery/tests/managed_path_resolution.rs.
   // +227: BYOH pass-2 C1 — 4 registry lifecycle tests (warm→spawn, delete→dangling,
   // immediate save+start, edit with rename) added to discovery/tests.rs.
-  ["src-tauri/src/managed_agents/discovery/tests.rs", 1500],
+  // +64: BYOH pass-2 I2 env round-trip — 2 discriminating tests proving custom
+  // catalog entries carry definition_env and builtins do not.
+  ["src-tauri/src/managed_agents/discovery/tests.rs", 1564],
   // identity-import-keyring: the identity resolution state machine's behavioral
   // matrix (46 tests over FakeIdentityStore — probe × marker × file cells,
   // adoption / read-back-corruption / marker-failure arms, recovery-mode
@@ -531,7 +539,9 @@ const overrides = new Map([
   // +30: BYOH F5 — atomic-write-file dep, original_id rename/delete support.
   // +13: BYOH pass-2 C1 — warm_harness_registry_from_dir call in save and
   // delete commands now verifies transactional registry refresh.
-  ["src-tauri/src/commands/agent_discovery.rs", 1979],
+  // +2: BYOH pass-2 I2 env round-trip — definition_env carried through save
+  // return value so the frontend immediately has the updated env.
+  ["src-tauri/src/commands/agent_discovery.rs", 1981],
   // draft-persistence predicate: submit-time `loadDraft` check + inline comment
   // + deps-array entry in submitMessage closes the never-persisted-boundary
   // defect (Thufir Pass-3 finding). Load-bearing correctness fix; queued to

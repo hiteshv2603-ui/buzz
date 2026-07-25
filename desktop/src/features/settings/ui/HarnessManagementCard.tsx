@@ -18,7 +18,12 @@ import {
   getRuntimeDisplayLabel,
   RuntimeIcon,
 } from "../../onboarding/ui/RuntimeIcon";
-import { buildEnvRecord, filterArgs, idFromLabel } from "./harnessFormLogic";
+import {
+  buildEnvRecord,
+  envPairsFromRecord,
+  filterArgs,
+  idFromLabel,
+} from "./harnessFormLogic";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 
 // ── Preset card ───────────────────────────────────────────────────────────────
@@ -439,6 +444,7 @@ function CustomHarnessRow({ entry }: { entry: AcpRuntimeCatalogEntry }) {
           label: entry.label,
           command: entry.command ?? "",
           args: entry.defaultArgs ?? [],
+          env: envPairsFromRecord(entry.definitionEnv),
           installInstructionsUrl: entry.installInstructionsUrl,
         }}
         originalId={entry.id}

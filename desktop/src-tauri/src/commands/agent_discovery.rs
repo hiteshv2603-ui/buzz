@@ -191,6 +191,8 @@ pub async fn save_custom_harness(
         auth_status: AuthStatus::NotApplicable,
         login_hint: None,
         source: HarnessSource::Custom,
+        // Carry definition env back so the edit form can read and preserve it.
+        definition_env: definition.env,
     })
 }
 

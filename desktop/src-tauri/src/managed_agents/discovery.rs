@@ -1442,6 +1442,8 @@ pub fn discover_acp_runtimes_from(
                     auth_status: AuthStatus::Unknown,
                     login_hint: None,
                     source: HarnessSource::Builtin,
+                    // Builtin entries have no user-editable env; definition_env is empty.
+                    definition_env: Default::default(),
                 },
             }
         })
@@ -1549,6 +1551,8 @@ pub fn discover_acp_runtimes_from(
             auth_status: AuthStatus::NotApplicable,
             login_hint: None,
             source: HarnessSource::Preset,
+            // Preset entries have static, non-editable env; definition_env is empty.
+            definition_env: Default::default(),
         });
 
         // Register for spawn-time resolution.
@@ -1617,6 +1621,9 @@ pub fn discover_acp_runtimes_from(
                 auth_status: AuthStatus::NotApplicable,
                 login_hint: None,
                 source: HarnessSource::Custom,
+                // Carry definition env into the catalog so the edit form can
+                // read it back — prevents silently erasing env on save.
+                definition_env: def.env.clone(),
             });
 
             loaded_defs.push(def);

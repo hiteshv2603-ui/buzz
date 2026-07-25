@@ -44,6 +44,21 @@ export function buildEnvRecord(
 }
 
 /**
+ * Convert a `Record<string, string>` env map (as stored on a catalog entry or
+ * harness definition) into the array of `{ key, value }` pairs that
+ * `CustomHarnessForm` and `EnvEditor` work with.
+ *
+ * Used when opening the edit form for an existing custom harness so that
+ * existing env vars are pre-filled instead of silently reset to empty.
+ */
+export function envPairsFromRecord(
+  record: Record<string, string> | undefined,
+): Array<{ key: string; value: string }> {
+  if (!record) return [];
+  return Object.entries(record).map(([key, value]) => ({ key, value }));
+}
+
+/**
  * Remove empty/whitespace-only argument rows from the args list before
  * sending to the backend.  Preserves legitimate blank-string args only
  * when they contain non-whitespace content so quoted/complex args are

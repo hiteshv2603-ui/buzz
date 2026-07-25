@@ -1494,3 +1494,70 @@ fn registry_edit_with_id_rename_old_dangling_new_resolved() {
         "new id must resolve after rename"
     );
 }
+
+// ── I2: custom catalog entry carries definition_env for the edit round-trip ───
+
+/// A custom harness definition that includes env vars must surface those vars
+/// in the `definition_env` field of the resulting `AcpRuntimeCatalogEntry`.
+///
+/// This proves the edit-form round-trip: the backend carries env into the
+/// catalog, the frontend reads it back when opening the edit form, and Save
+/// therefore preserves existing env vars rather than silently erasing them.
+#[test]
+fn custom_catalog_entry_carries_definition_env_for_edit_roundtrip() {
+    use crate::managed_agents::discovery::discover_acp_runtimes_from;
+    use std::{collections::BTreeMap, fs};
+    use tempfile::tempdir;
+
+    let dir = tempdir().unwrap();
+    // Write a custom definition with two env vars.
+    fs::write(
+        dir.path().join("env-harness.json"),
+        r#"{
+            "id": "env-harness",
+            "label": "Env Harness",
+            "command": "env-harness-bin",
+            "args": [],
+            "env": { "CURSOR_ACP": "1", "MY_TOKEN": "abc" }
+        }"#,
+    )
+    .unwrap();
+
+    let entries = discover_acp_runtimes_from(Some(dir.path()));
+    let entry = entries
+        .iter()
+        .find(|e| e.id == "env-harness")
+        .expect("custom entry must appear in catalog");
+
+    let expected: BTreeMap<String, String> = [
+        ("CURSOR_ACP".to_string(), "1".to_string()),
+        ("MY_TOKEN".to_string(), "abc".to_string()),
+    ]
+    .into_iter()
+    .collect();
+
+    assert_eq!(
+        entry.definition_env, expected,
+        "catalog entry must carry definition env vars so the edit form can read them back"
+    );
+}
+
+/// A builtin catalog entry must have an empty `definition_env` — their env
+/// is handled via the `KnownAcpRuntime` metadata path, not user-editable JSON.
+#[test]
+fn builtin_catalog_entry_has_empty_definition_env() {
+    use crate::managed_agents::discovery::discover_acp_runtimes_from;
+
+    let entries = discover_acp_runtimes_from(None);
+    // Find any builtin entry (e.g. "goose" or "claude").
+    let builtin = entries
+        .iter()
+        .find(|e| e.source == crate::managed_agents::HarnessSource::Builtin)
+        .expect("at least one builtin must exist");
+
+    assert!(
+        builtin.definition_env.is_empty(),
+        "builtin entry must not carry definition_env, got: {:?}",
+        builtin.definition_env
+    );
+}
